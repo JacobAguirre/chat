@@ -591,7 +591,7 @@ server.post(
                 if (HookMgr.hasHook('app.b2b.account.retrieve')) {
                     var accountDetails = HookMgr.callHook('app.b2b.account.retrieve',
                                                           'Handle',
-                                                           accountNumber, 
+                                                           accountNumber,
                                                            zipCode);
                 }
                 // populate the response
@@ -697,7 +697,7 @@ server.get('B2BRegistration', function (req, res, next) {
         viewData.list = list;
         res.setViewData(viewData);
         /** Wishlist PrePend Management END */
-
+        /*
        if(isGoogleRecaptchaEnabled && !empty(googeReCaptchaKey))
         {
             if (request.getHttpParameterMap().get("g-recaptcha-response").value === undefined || 
@@ -714,6 +714,7 @@ server.get('B2BRegistration', function (req, res, next) {
                 }
             }
         }
+        */
         if (registrationForm.login.password.value !== registrationForm.login.passwordconfirm.value ) {
             registrationForm.login.password.valid = false;
             registrationForm.login.passwordconfirm.valid = false;
@@ -844,6 +845,15 @@ server.get('B2BRegistration', function (req, res, next) {
                                     (newCustomerProfile.custom.b2bAccountNumber != "") &&
                                     (newCustomerProfile.custom.b2bSalesPersonInfo != "")) {
                                     var HookMgr = require('dw/system/HookMgr');
+
+
+                                    if(HookMgr.hasHook('app.b2b.create.account')){
+                                        console.log("hook found");
+                                        var testVar = HookMgr.callHook('app.b2b.create.account',
+                                                                       'createAccount',
+                                                                       registrationForm.organizationName,
+                                                                       registrationForm.phone);
+                                    }
 
                                     var salesPersonJSON = JSON.parse(registrationForm.b2bSalesPersonInfo);
                                     if (salesPersonJSON && HookMgr.hasHook('app.b2b.salesperson.retrieve')) {
