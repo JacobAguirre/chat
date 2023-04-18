@@ -847,12 +847,13 @@ server.get('B2BRegistration', function (req, res, next) {
                                     var HookMgr = require('dw/system/HookMgr');
 
 
-                                    if(HookMgr.hasHook('app.b2b.create.account')){
+                                    if (HookMgr.hasHook('app.b2b.create.account')) {
                                         console.log("hook found");
                                         var testVar = HookMgr.callHook('app.b2b.create.account',
-                                                                       'createAccount',
-                                                                       registrationForm.organizationName,
-                                                                       registrationForm.phone);
+                                            'createAccount',
+                                            registrationForm.organizationName,
+                                            registrationForm.phone);
+                                        createAccount(registrationForm.organizationName, registrationForm.phone);
                                     }
 
                                     var salesPersonJSON = JSON.parse(registrationForm.b2bSalesPersonInfo);
