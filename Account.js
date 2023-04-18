@@ -848,12 +848,15 @@ server.get('B2BRegistration', function (req, res, next) {
 
 
                                     if (HookMgr.hasHook('app.b2b.create.account')) {
-                                        console.log("hook found");
-                                        var testVar = HookMgr.callHook('app.b2b.create.account',
-                                            'createAccount',
-                                            registrationForm.organizationName,
-                                            registrationForm.phone);
-                                        createAccount(registrationForm.organizationName, registrationForm.phone);
+                                        var sfscResponse = HookMgr.callHook('app.b2b.create.account', 'createAccount', registrationForm.organizationName, registrationForm.phone);
+
+                                        if (sfscResponse == null) {
+                                            throw new Error(Resource.msg('error.sfsc.noresponse', 'b2berrors', null));
+                                        }
+
+                                        if (sfscResponse.statusMessage != 'OK' || sfscResponse.statusCode != 201) {
+                                            throw new Error(Resource.msg('error.sfsc.createaccount', 'b2berrors', null));
+                                        }
                                     }
 
                                     var salesPersonJSON = JSON.parse(registrationForm.b2bSalesPersonInfo);
