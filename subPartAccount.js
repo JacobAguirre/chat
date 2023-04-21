@@ -1,3 +1,21 @@
+'use strict';
+
+var server = require('server');
+
+
+server.extend(module.superModule);
+
+var csrfProtection = require('*/cartridge/scripts/middleware/csrf');
+var b2bUtils = require('*/cartridge/scripts/helpers/b2bUtils');
+var validationHelper = require('*/cartridge/scripts/helpers/validationHelper');
+var messageHelper = require('*/cartridge/scripts/helpers/messageHelper');
+var productListHelper = require('*/cartridge/scripts/productList/productListHelpers');
+var Resource = require('dw/web/Resource');
+var Site = require('dw/system/Site');
+var googeReCaptchaKey = Site.getCurrent().getCustomPreferenceValue('googeReCaptchaKey');
+var isGoogleRecaptchaEnabled = Site.getCurrent().getCustomPreferenceValue('isGoogleRecaptchaEnabled');
+
+
 /**
  * Route to handle the B2B User Registration Submit Form
  * Account-B2BSubmitRegistration : The Account-SubmitRegistration endpoint is the endpoint that gets hit when a shopper submits their registration for a new account
@@ -39,6 +57,7 @@
         var Resource = require('dw/web/Resource');
         var formErrors = require('*/cartridge/scripts/formErrors');
         var registrationForm = server.forms.getForm('profile');
+        var HookMgr = require('dw/system/HookMgr');
 
 
         /** Wishlist PrePend Management START */
@@ -47,7 +66,7 @@
         viewData.list = list;
         res.setViewData(viewData);
         /** Wishlist PrePend Management END */
-        /*
+
        if(isGoogleRecaptchaEnabled && !empty(googeReCaptchaKey))
         {
             if (request.getHttpParameterMap().get("g-recaptcha-response").value === undefined || 
@@ -64,7 +83,6 @@
                 }
             }
         }
-        */
         if (registrationForm.login.password.value !== registrationForm.login.passwordconfirm.value ) {
             registrationForm.login.password.valid = false;
             registrationForm.login.passwordconfirm.valid = false;
@@ -187,23 +205,66 @@
                                     accountNumber = registrationForm.b2bAccountNumber;
                                 } 
                                 b2bUtils.createB2BOrganization(registrationForm.organizationName, 
-                                                               accountNumber, login);
+                                                              accountNumber, login);
+                                var HookMgr = require('dw/system/HookMgr');
 
-                                // retrieve the sales person's detailed information 
-                                if ((newCustomerProfile.custom.b2bUser) && 
+
+                                if (HookMgr.hasHook('app.b2b.create.account')) {
+                                    var sfscResponseAccount = HookMgr.callHook('app.b2b.create.account', 'createAccount', registrationForm.organizationName, registrationForm.phone);
+
+                                    if (sfscResponseAccount == null) {
+                                        throw new Error(Resource.msg('error.sfsc.noresponse', 'b2berrors', null));
+                                    }
+                                    if (sfscResponseAccount.statusMessage != 'Created' || sfscResponseAccount.statusCode != 201) {
+                                        throw new Error(Resource.msg('error.sfsc.createaccount', 'b2berrors', null));
+                                    }
+                                }
+
+                                // Parse the JSON Hook Reponse into an object
+                                var accountResponseObject = JSON.parse(sfscResponseAccount.text);
+
+                                if (HookMgr.hasHook('app.b2b.create.contact')) {
+                                    var sfscResponseContact = HookMgr.callHook('app.b2b.create.contact', 'createContact', registrationForm.firstName,registrationForm.lastName, registrationForm.phone, registrationForm.email, accountResponseObject.id);
+
+                                    if (sfscResponseContact == null) {
+                                        throw new Error(Resource.msg('error.sfsc.noresponse', 'b2berrors', null));
+                                    }
+                                    if (sfscResponseContact.statusMessage != 'Created' || sfscResponseContact.statusCode != 201) {
+                                        throw new Error(Resource.msg('error.sfsc.createcontact', 'b2berrors', null));
+                                    }
+                                }
+
+                                
+                                var contactResponseObject = JSON.parse(sfscResponseContact.text);
+
+                                if (HookMgr.hasHook('app.b2b.assign.account_contact_role')) {
+                                    var sfscResponseAdminACR = HookMgr.callHook('app.b2b.assign.account_contact_role', 'assignAccountContactRole', accountResponseObject.id, contactResponseObject.id, 'Admin');
+
+                                    if (sfscResponseAdminACR == null) {
+                                        throw new Error(Resource.msg('error.sfsc.noresponse', 'b2berrors', null));
+                                    }
+                                    if (sfscResponseAdminACR.statusMessage != 'Created' || sfscResponseAdminACR.statusCode != 201) {
+                                        throw new Error(Resource.msg('error.sfsc.createAdminACR', 'b2berrors', null));
+                                    }
+
+                                    var sfscResponseBuyerACR = HookMgr.callHook('app.b2b.assign.account_contact_role', 'assignAccountContactRole', accountResponseObject.id, contactResponseObject.id, 'Buyer');
+
+                                    if (sfscResponseBuyerACR == null) {
+                                        throw new Error(Resource.msg('error.sfsc.noresponse', 'b2berrors', null));
+                                    }
+                                    if (sfscResponseBuyerACR.statusMessage != 'Created' || sfscResponseBuyerACR.statusCode != 201) {
+                                        throw new Error(Resource.msg('error.sfsc.createBuyerACR', 'b2berrors', null));
+                                    }
+                                }
+
+
+
+                                // retrieve the sales person's detailed information
+                                if ((newCustomerProfile.custom.b2bUser) &&
                                     (newCustomerProfile.custom.b2bAccountNumber != null) && 
                                     (newCustomerProfile.custom.b2bAccountNumber != "") &&
                                     (newCustomerProfile.custom.b2bSalesPersonInfo != "")) {
                                     var HookMgr = require('dw/system/HookMgr');
-
-
-                                    if(HookMgr.hasHook('app.b2b.create.account')){
-                                        console.log("hook found");
-                                        var testVar = HookMgr.callHook('app.b2b.create.account',
-                                                                       'createAccount',
-                                                                       registrationForm.organizationName,
-                                                                       registrationForm.phone);
-                                    }
 
                                     var salesPersonJSON = JSON.parse(registrationForm.b2bSalesPersonInfo);
                                     if (salesPersonJSON && HookMgr.hasHook('app.b2b.salesperson.retrieve')) {
@@ -250,11 +311,20 @@
                     //Send Newsletter Entry message now
                     messageHelper.handleNewsletterSignup(registrationForm.addToEmailList,request.geolocation.postalCode,registrationForm.email);
 
-                    // send the registration email
-                    accountHelpers.sendCreateAccountEmail(authenticatedCustomer.profile);
-
-                    // send the B2B registered user email
-                    b2bUtils.createSendB2BRegisteredUserEmail(registrationForm);
+                    if(registrationForm.b2bAdmin){
+						// send the B2B admin email
+						b2bUtils.createSendB2BNewUserEmail(registrationForm);
+					}
+					else if(registrationForm.b2bUser)
+					{
+						// send the B2B registered user email
+						b2bUtils.createSendB2BRegisteredUserEmail(registrationForm);
+					}
+					else
+					{
+						// send the registration email
+						accountHelpers.sendCreateAccountEmail(authenticatedCustomer.profile);
+					}
 
                     res.setViewData({ authenticatedCustomer: authenticatedCustomer });
                     res.json({
@@ -289,3 +359,4 @@
         next();
     }
 );
+module.exports = server.exports();
